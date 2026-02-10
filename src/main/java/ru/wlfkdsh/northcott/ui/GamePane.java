@@ -5,6 +5,7 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
@@ -13,7 +14,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import ru.wlfkdsh.northcott.core.api.BoardSnapshot;
-import ru.wlfkdsh.northcott.core.api.GameApi;
 import ru.wlfkdsh.northcott.core.api.Move;
 import ru.wlfkdsh.northcott.core.api.Player;
 import ru.wlfkdsh.northcott.core.impl.DefaultNorthcottGame;
@@ -24,7 +24,7 @@ import java.util.Set;
 public final class GamePane extends BorderPane {
     private static final int AI_DELAY_MS = 200;
 
-    private final GameApi game;
+    private final DefaultNorthcottGame game;
 
     private final Player human = Player.WHITE;
     private final Player computer = Player.BLACK;
@@ -40,11 +40,13 @@ public final class GamePane extends BorderPane {
     private Integer selectedRow = null;
     private Integer selectedCol = null;
 
-    private Integer targetCol = null;      // выбранная клетка назначения (клавиатура)
-    private Integer minCandidate = null;   // границы допустимых ходов в строке
+    private Integer targetCol = null;
+    private Integer minCandidate = null;
     private Integer maxCandidate = null;
 
     private PauseTransition aiTimer;
+
+    private final CheckBox humanFirstCheck = new CheckBox("Игрок ходит первым");
 
     public GamePane() {
         this.game = new DefaultNorthcottGame(8, 8);
@@ -56,20 +58,21 @@ public final class GamePane extends BorderPane {
         setPadding(new Insets(12));
         setCenter(boardView);
 
+        humanFirstCheck.setSelected(true);
+
         var newGameBtn = new Button("Новая игра");
         newGameBtn.setOnAction(e -> {
             restart();
             requestFocus();
         });
 
-        // пока оставляем (как резерв). Позже уберём совсем, как договорились
         var computerBtn = new Button("Ход компьютера (" + computer + ")");
         computerBtn.setOnAction(e -> {
             doComputerMove();
             requestFocus();
         });
 
-        var top = new HBox(10, newGameBtn, computerBtn);
+        var top = new HBox(10, newGameBtn, computerBtn, humanFirstCheck);
         top.setAlignment(Pos.CENTER_LEFT);
         top.setPadding(new Insets(0, 0, 10, 0));
         setTop(top);
@@ -89,11 +92,12 @@ public final class GamePane extends BorderPane {
     private void restart() {
         stopAiTimer();
 
-        game.reset();
+        Player start = humanFirstCheck.isSelected() ? human : computer;
+        game.reset(start);
+
         clearSelection();
         renderAll();
 
-        // на будущее: если решим, что первым ходит компьютер, это уже будет работать
         maybeAutoComputerMove();
     }
 
@@ -114,14 +118,12 @@ public final class GamePane extends BorderPane {
             return;
         }
 
-        // клик по другой своей фишке -> переключаем выбор
         if (col == s.whiteCols()[row]) {
             selectRow(row);
             renderAll();
             return;
         }
 
-        // клик по клетке назначения
         if (row == selectedRow && candidateCols.contains(col)) {
             boolean ok = game.makeMove(row, col);
 
@@ -145,7 +147,7 @@ public final class GamePane extends BorderPane {
             return;
         }
 
-        // резервный ручной запуск хода компьютера (оставляем)
+        // резерв: вручную дать компьютеру сделать ход
         if (code == KeyCode.C) {
             doComputerMove();
             e.consume();
@@ -154,7 +156,6 @@ public final class GamePane extends BorderPane {
 
         if (game.isGameOver()) return;
 
-        // клавиатурой управляем только ход человека
         if (game.currentPlayer() != human) return;
 
         if (code == KeyCode.ESCAPE) {
@@ -196,14 +197,12 @@ public final class GamePane extends BorderPane {
 
     private void moveSelectionRow(int delta) {
         int rows = game.rows();
-
         int start = (selectedRow == null) ? 0 : selectedRow;
 
         for (int i = 0; i < rows; i++) {
             int r = (start + delta + rows) % rows;
             start = r;
 
-            // выбираем только строки, где есть ход
             if (!game.legalDestinations(r).isEmpty()) {
                 selectRow(r);
                 renderAll();
@@ -309,14 +308,12 @@ public final class GamePane extends BorderPane {
 
         boolean moved = false;
 
-        // 1) Пытаемся сделать выигрышный ход (если позиция выигрышная)
         var best = game.bestMove();
         if (best.isPresent()) {
             Move m = best.get();
             moved = game.makeMove(m.row(), m.toCol());
         }
 
-        // 2) Если выигрышного хода нет (nim=0) — делаем любой допустимый ход, чтобы игра продолжалась
         if (!moved) {
             for (int r = 0; r < game.rows(); r++) {
                 var dests = game.legalDestinations(r);

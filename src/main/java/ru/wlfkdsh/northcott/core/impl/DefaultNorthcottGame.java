@@ -25,7 +25,6 @@ public final class DefaultNorthcottGame implements GameApi {
     private boolean gameOver = false;
     private Player winner = null;
 
-    // ✅ Дефолтный конструктор под “классическую” доску 8×8
     public DefaultNorthcottGame() {
         this(DEFAULT_ROWS, DEFAULT_COLS);
     }
@@ -92,7 +91,6 @@ public final class DefaultNorthcottGame implements GameApi {
 
         var out = new ArrayList<Integer>();
 
-        // Учебный монотонный вариант:
         // WHITE двигается вправо (к BLACK), BLACK — влево (к WHITE).
         if (current == Player.WHITE) {
             for (int c = w + 1; c <= b - 1; c++) out.add(c);
@@ -120,13 +118,10 @@ public final class DefaultNorthcottGame implements GameApi {
 
         current = current.opposite();
 
-        boolean hasMoves = false;
-        for (int r = 0; r < rows; r++) {
-            if (!legalDestinations(r).isEmpty()) { hasMoves = true; break; }
-        }
+        boolean hasMoves = hasAnyMoveForCurrentPlayer();
         if (!hasMoves) {
             gameOver = true;
-            winner = current.opposite();
+            winner = current.opposite(); // выиграл тот, кто сделал последний ход
         }
 
         return true;
@@ -164,13 +159,11 @@ public final class DefaultNorthcottGame implements GameApi {
 
     @Override
     public void reset() {
-        // ✅ Новая стартовая расстановка “как на картинке, но слева/справа”
-        // Идея: WHITE занимает 2 крайних столбца слева (0 и 1) “шашечкой”,
-        // BLACK занимает 2 крайних столбца справа (cols-2 и cols-1) “шашечкой”.
-        // В каждой строке ровно по одной фишке каждого цвета.
+        reset(Player.WHITE);
+    }
 
+    public void reset(Player startingPlayer) {
         if (cols < 4) {
-            // Фолбек на маленькие доски: просто крайние столбцы
             for (int r = 0; r < rows; r++) {
                 whiteCols[r] = 0;
                 blackCols[r] = cols - 1;
@@ -187,17 +180,21 @@ public final class DefaultNorthcottGame implements GameApi {
             }
         }
 
-        current = Player.WHITE;
+        current = (startingPlayer == null ? Player.WHITE : startingPlayer);
         gameOver = false;
         winner = null;
 
-        boolean hasMoves = false;
-        for (int r = 0; r < rows; r++) {
-            if (!legalDestinations(r).isEmpty()) { hasMoves = true; break; }
-        }
+        boolean hasMoves = hasAnyMoveForCurrentPlayer();
         if (!hasMoves) {
             gameOver = true;
-            winner = Player.BLACK;
+            winner = current.opposite(); // если стартующий не может ходить
         }
+    }
+
+    private boolean hasAnyMoveForCurrentPlayer() {
+        for (int r = 0; r < rows; r++) {
+            if (!legalDestinations(r).isEmpty()) return true;
+        }
+        return false;
     }
 }
